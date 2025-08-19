@@ -144,10 +144,28 @@ function M.enable_line_numbers()
     return
   end
 
-  for index, label in ipairs(M.config.labels) do
-    vim.keymap.set({ 'n', 'v', 'o' }, label .. M.config.up_key, index .. 'k', { noremap = true })
-    vim.keymap.set({ 'n', 'v', 'o' }, label .. M.config.down_key, index .. 'j', { noremap = true })
+  -- This works even for "invalid" base-5 numbers like 15.  Consider that if we _could_ write it,
+  -- 2:0 == 1:10 (or 1a if you like) in base-10 (where : is separating digits).
+  local convert5 = function(count)
+    local sv = count
+    local base5 = 0
+    local pos = 1
+    local i = 0
+    while count ~= 0 and i < 5 do
+      base5 = base5  + (count % 10) * pos
+      pos = pos * 5
+      count = math.floor(count / 10)
+      i = i + 1
+    end
+    return base5
   end
+
+  vim.keymap.set({'n', 'v', 'o'}, M.config.down_key, function()
+    vim.api.nvim_feedkeys(convert5(vim.v.count) .. M.config.down_key, 'n', false)
+  end, { noremap = true })
+  vim.keymap.set({'n', 'v', 'o'}, M.config.up_key, function()
+    vim.api.nvim_feedkeys(convert5(vim.v.count) .. M.config.up_key, 'n', false)
+  end, { noremap = true })
 
   enabled = true
   update_status_column()
@@ -158,11 +176,8 @@ function M.disable_line_numbers()
     return
   end
 
-  for index, label in ipairs(M.config.labels) do
-    vim.keymap.del({ 'n', 'v', 'o' }, label .. M.config.up_key)
-    vim.keymap.del({ 'n', 'v', 'o' }, label .. M.config.down_key)
-  end
-
+  vim.keymap.del({ 'n', 'v', 'o' }, M.config.up_key)
+  vim.keymap.del({ 'n', 'v', 'o' }, M.config.down_key)
 
   enabled = false
   update_status_column()
