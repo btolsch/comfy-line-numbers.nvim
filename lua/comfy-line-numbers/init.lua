@@ -104,14 +104,19 @@ local should_hide_numbers = function(filetype, buftype)
 end
 
 -- Defined on the global namespace to be used in Vimscript below.
-_G.get_label = function(absnum, relnum)
+_G.get_label = function(absnum, relnum, virtnum)
   if not enabled then
     return absnum
   end
 
   if relnum == 0 then
-    -- Pad current line number to match width
-    return string.format("%-2d", vim.fn.line ".")
+    if virtnum == 0 then
+      -- Pad current line number to match width
+      return string.format("%-2d", vim.fn.line ".")
+    else
+      -- Draw nothing for the wrapped part of the line
+      return ''
+    end
   elseif relnum > 0 and relnum <= #M.config.labels then
     -- Pad label to consistent width
     return string.format("%-2s", M.config.labels[relnum])
@@ -133,7 +138,7 @@ function update_status_column()
       end)
     else
       vim.api.nvim_win_call(win, function()
-        vim.opt.statuscolumn = '%=%s%=%{v:lua.get_label(v:lnum, v:relnum)} '
+        vim.opt.statuscolumn = '%=%s%=%{v:lua.get_label(v:lnum, v:relnum, v:virtnum)} '
       end)
     end
   end
@@ -144,27 +149,23 @@ function M.enable_line_numbers()
     return
   end
 
-  -- This works even for "invalid" base-5 numbers like 15.  Consider that if we _could_ write it,
-  -- 2:0 == 1:10 (or 1a if you like) in base-10 (where : is separating digits).
-  local convert5 = function(count)
-    local sv = count
-    local base5 = 0
-    local pos = 1
-    local i = 0
-    while count ~= 0 and i < 5 do
-      base5 = base5  + (count % 10) * pos
-      pos = pos * 5
-      count = math.floor(count / 10)
-      i = i + 1
+  local translate_motion = function(send_key)
+    local jump_dist = vim.v.count1
+    local lookup = M.jumps[tostring(jump_dist)]
+    if lookup ~= nil then
+      jump_dist = lookup
     end
-    return base5
+    if vim.v.count == 0 then
+      send_key = 'g' .. send_key
+    end
+    vim.api.nvim_feedkeys(jump_dist .. send_key, 'n', false)
   end
 
   vim.keymap.set({'n', 'v', 'o'}, M.config.down_key, function()
-    vim.api.nvim_feedkeys(convert5(vim.v.count) .. M.config.down_key, 'n', false)
+    translate_motion(M.config.down_key)
   end, { noremap = true })
   vim.keymap.set({'n', 'v', 'o'}, M.config.up_key, function()
-    vim.api.nvim_feedkeys(convert5(vim.v.count) .. M.config.up_key, 'n', false)
+    translate_motion(M.config.up_key)
   end, { noremap = true })
 
   enabled = true
@@ -195,6 +196,11 @@ end
 
 function M.setup(config)
   M.config = vim.tbl_deep_extend("force", M.config, config or {})
+
+  M.jumps = {}
+  for index, label in ipairs(M.config.labels) do
+    M.jumps[label] = index
+  end
 
   vim.api.nvim_create_user_command(
     'ComfyLineNumbers',
