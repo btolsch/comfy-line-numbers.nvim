@@ -155,10 +155,16 @@ function M.enable_line_numbers()
     if lookup ~= nil then
       jump_dist = lookup
     end
-    if vim.v.count == 0 then
+    local prefix = tostring(jump_dist)
+    -- Operator pending mode is appears to reset at the start of nvim_feedkeys(), so we need to
+    -- forward it.
+    if string.find(vim.api.nvim_get_mode().mode, 'o') ~= nil then
+      prefix = vim.v.operator .. prefix
+    elseif vim.v.count == 0 then
+      -- Only use gj/gk for single line motion and not in operator pending mode.
       send_key = 'g' .. send_key
     end
-    vim.api.nvim_feedkeys(jump_dist .. send_key, 'n', false)
+    vim.api.nvim_feedkeys(prefix .. send_key, 'n', false)
   end
 
   vim.keymap.set({'n', 'v', 'o'}, M.config.down_key, function()
